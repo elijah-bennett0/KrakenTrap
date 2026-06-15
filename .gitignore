@@ -1,0 +1,31 @@
+# Build outputs
+krakentrap
+*.o
+*.so
+*.a
+*.out
+
+# Example binaries
+examples/loop
+examples/crash
+examples/args
+examples/vuln1
+
+# Debug files
+core
+core.*
+*.core
+
+# Generated session data
+sessions/*
+!sessions/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Editor/OS files
+*~
+*.swp
+.DS_Store
