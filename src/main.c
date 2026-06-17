@@ -22,6 +22,27 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 
+unsigned long set_breakpoint(pid_t child_pid, unsigned long addr) {
+
+	unsigned long data; // og data
+	unsigned long data_with_int3; // data after int3 instruction added
+
+	// read the data
+	data = ptrace(PTRACE_PEEKTEXT, child_pid, (void *)addr, 0);
+	if (data == (unsigned long)-1) {
+		perror("ptrace peektext");
+		return 0;
+	}
+
+	data_with_int3 = (data & ~0xff) | 0xcc;
+	// write the data with int3
+	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)addr, (void *)data_with_int3) < 0) {
+		perror("ptrace poketext");
+		return 0;
+	}
+	return data;
+}
+
 void print_registers(pid_t child_pid) {
 
 	// ptrace(PTRACE_GETREGS/GETFPREGS, pid, 0, &struct);
@@ -74,30 +95,45 @@ void run_target(const char* progname) {
 void run_debugger(pid_t child_pid) {
 
 	int wait_status;
-	unsigned icounter = 0;
 	printf("debugger started\n");
 
-	// waits for child to stop on first instruction
-	wait(&wait_status);
+	waitpid(child_pid, &wait_status, 0);
 
-	while (WIFSTOPPED(wait_status)) {
-		icounter++;
-
-		// print registers every 10000 instructions for now
-		if (icounter % 10000 == 0) {
-			print_registers(child_pid);
-		}
-
-		// execute another instruction
-		if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
-			perror("ptrace");
-			return;
-		}
-		// wait for child to stop on next instruction
-		wait(&wait_status);
+	if (!WIFSTOPPED(wait_status)) {
+		printf("child did not stop as expected\n");
+		return;
 	}
 
-	printf("the child executed %u instructions\n", icounter);
+	unsigned long main_addr = 0x401156; // hardcode main address for now
+	unsigned long og_data = set_breakpoint(child_pid, main_addr);
+
+	if (og_data == 0) {
+		printf("failed to set breakpoint\n");
+		return;
+	}
+
+	printf("breakpoint set at 0x%lx\n", main_addr);
+
+	// ptrace continue until hit breakpoint
+	if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
+		perror("ptrace cont");
+		return;
+	}
+
+	waitpid(child_pid, &wait_status, 0);
+
+	if (WIFSTOPPED(wait_status)) {
+		printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
+		printf("hit breakpoint at 0x%lx\n", main_addr);
+		print_registers(child_pid);
+	}
+
+	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)main_addr, (void *)og_data) < 0) {
+		perror("ptrace restore");
+		return;
+	}
+
+	printf("restored original instruction at 0x%lx\n", main_addr);
 }
 
 int main(int argc, char** argv) {
