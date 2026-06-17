@@ -1,13 +1,14 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -g -Iinclude
-
-TARGET=krakentrap
-
-SRC=src/main.c
+CFLAGS=-Wall -Wextra -g
 
 all:
-	$(CC) $(CFLAGS) $(SRC) -o $(TARGET)
+	$(CC) $(CFLAGS) src/main.c -o krakentrap
+
+example:
+	$(CC) -g -no-pie -fno-stack-protector examples/loop.c -o examples/loop
+
+run: all example
+	./krakentrap ./examples/loop
 
 clean:
-	rm -f $(TARGET)
-	rm -f examples/loop
+	rm -f krakentrap examples/loop
