@@ -22,6 +22,23 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 
+void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
+
+	struct user_regs_struct regs;
+
+	if (ptrace(PTRACE_GETREGS, child_pid, 0, &regs) < 0) {
+		perror("ptrace getregs");
+		return;
+	}
+
+	regs.rip = addr;
+
+	if (ptrace(PTRACE_SETREGS, child_pid, 0, &regs) < 0) {
+		perror("ptrace setregs");
+		return;
+	}
+}
+
 unsigned long set_breakpoint(pid_t child_pid, unsigned long addr) {
 
 	unsigned long data; // og data
@@ -134,6 +151,41 @@ void run_debugger(pid_t child_pid) {
 	}
 
 	printf("restored original instruction at 0x%lx\n", main_addr);
+
+	set_instruction_pointer(child_pid, main_addr); // this is to rewind the instruction pointer back to the main address
+
+	if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
+		perror("ptrace singlestep");
+		return;
+	}
+
+	waitpid(child_pid, &wait_status, 0);
+	printf("single stepped original instruction\n");
+
+	if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
+		perror("ptrace cont");
+		return;
+	}
+
+	while (1) {
+
+		waitpid(child_pid, &wait_status, 0);
+		// exit
+		if (WIFEXITED(wait_status)) {
+			printf("child exited with code %d\n", WEXITSTATUS(wait_status));
+			break;
+		}
+		// killed
+		if (WIFSIGNALED(wait_status)) {
+			printf("child killed by signal %d\n", WTERMSIG(wait_status));
+			break;
+		}
+		// stopped
+		if (WIFSTOPPED(wait_status)) {
+			printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
+			break;
+		}
+	}
 }
 
 int main(int argc, char** argv) {
