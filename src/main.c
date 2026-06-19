@@ -21,6 +21,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/user.h>
+#include <errno.h>
 
 void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
 
@@ -45,11 +46,25 @@ unsigned long set_breakpoint(pid_t child_pid, unsigned long addr) {
 	unsigned long data_with_int3; // data after int3 instruction added
 
 	// read the data
+	errno = 0;
 	data = ptrace(PTRACE_PEEKTEXT, child_pid, (void *)addr, 0);
-	if (data == (unsigned long)-1) {
+
+	if (data == (unsigned long)-1 && errno != 0) {
 		perror("ptrace peektext");
 		return 0;
 	}
+
+	/*
+	0xff means only the lowest byte is 1s so we use ~0xff (~ = not) to flip it so that its all ones except the lowest byte
+	then we and it (&) with data so that we can set the lowest byte of the original data to 0
+	then we OR (|) it with 0xcc so that the last byte becomes 0xcc
+
+	example:
+	             data  = 0xabababab
+	             ~0xff = 0xffffff00
+	0xabababab & ~0xff = 0xababab00
+	0xababab00 | 0xcc  = 0xabababcc
+	*/
 
 	data_with_int3 = (data & ~0xff) | 0xcc;
 	// write the data with int3
@@ -109,7 +124,7 @@ void run_target(const char* progname) {
 	execl(progname, progname, (char *)NULL);
 }
 
-void run_debugger(pid_t child_pid) {
+void run_debugger(pid_t child_pid, unsigned long breakpoint_addr) {
 
 	int wait_status;
 	printf("debugger started\n");
@@ -120,16 +135,14 @@ void run_debugger(pid_t child_pid) {
 		printf("child did not stop as expected\n");
 		return;
 	}
-
-	unsigned long main_addr = 0x401156; // hardcode main address for now
-	unsigned long og_data = set_breakpoint(child_pid, main_addr);
+	unsigned long og_data = set_breakpoint(child_pid, breakpoint_addr);
 
 	if (og_data == 0) {
 		printf("failed to set breakpoint\n");
 		return;
 	}
 
-	printf("breakpoint set at 0x%lx\n", main_addr);
+	printf("breakpoint set at 0x%lx\n", breakpoint_addr);
 
 	// ptrace continue until hit breakpoint
 	if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
@@ -141,18 +154,18 @@ void run_debugger(pid_t child_pid) {
 
 	if (WIFSTOPPED(wait_status)) {
 		printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
-		printf("hit breakpoint at 0x%lx\n", main_addr);
+		printf("hit breakpoint at 0x%lx\n", breakpoint_addr);
 		print_registers(child_pid);
 	}
 
-	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)main_addr, (void *)og_data) < 0) {
+	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)breakpoint_addr, (void *)og_data) < 0) {
 		perror("ptrace restore");
 		return;
 	}
 
-	printf("restored original instruction at 0x%lx\n", main_addr);
+	printf("restored original instruction at 0x%lx\n", breakpoint_addr);
 
-	set_instruction_pointer(child_pid, main_addr); // this is to rewind the instruction pointer back to the main address
+	set_instruction_pointer(child_pid, breakpoint_addr); // this is to rewind the instruction pointer back to the main address
 
 	if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
 		perror("ptrace singlestep");
@@ -192,8 +205,16 @@ int main(int argc, char** argv) {
 
 	pid_t child_pid;
 
-	if (argc < 2) {
-		fprintf(stderr, "Expected a program name as an argument\n");
+	if (argc < 3) {
+		fprintf(stderr, "Usage: %s <target_binary> <breakpoint_address>\n", argv[0]);
+		return -1;
+	}
+
+	char *endptr = NULL;
+	unsigned long breakpoint_addr = strtoul(argv[2], &endptr, 0);
+
+	if (endptr == argv[2] || *endptr != '\0') {
+		fprintf(stderr, "invalid breakpoint address %s\n", argv[2]);
 		return -1;
 	}
 
@@ -201,7 +222,7 @@ int main(int argc, char** argv) {
 	if (child_pid == 0) {
 		run_target(argv[1]);
 	} else if (child_pid > 0) {
-		run_debugger(child_pid);
+		run_debugger(child_pid, breakpoint_addr);
 	} else {
 		perror("fork");
 		return -1;
