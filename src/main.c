@@ -14,6 +14,7 @@
  * the code samples are public domain / Unlicense.
  */
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -57,7 +58,7 @@ int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
 
 	if (bp->og_data == (unsigned long)-1 && errno != 0) {
 		perror("ptrace peektext");
-		return 0;
+		return -1;
 	}
 
 	/*
@@ -76,7 +77,7 @@ int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
 	// write the data with int3
 	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)bp->addr, (void *)data_with_int3) < 0) {
 		perror("ptrace poketext");
-		return 0;
+		return -1;
 	}
 
 	bp->enabled = 1;
@@ -147,84 +148,129 @@ void run_target(const char* progname) {
 	execl(progname, progname, (char *)NULL);
 }
 
-void run_debugger(pid_t child_pid, unsigned long breakpoint_addr) {
+void run_debugger(pid_t child_pid) {
 
 	int wait_status;
-	printf("debugger started\n");
+	char command[128];
 
 	waitpid(child_pid, &wait_status, 0);
 
-	if (!WIFSTOPPED(wait_status)) {
-		printf("child did not stop as expected\n");
-		return;
-	}
-	//unsigned long og_data = set_breakpoint(child_pid, breakpoint_addr);
-
 	breakpoint_t bp;
-	bp.addr = breakpoint_addr;
+	bp.addr = 0;
 	bp.og_data = 0;
 	bp.enabled = 0;
 
-	if (enable_breakpoint(child_pid, &bp) < 0) {
-		printf("failed to set breakpoint\n");
-		return;
-	}
-
-	printf("breakpoint set at 0x%lx\n", breakpoint_addr);
-
-	// ptrace continue until hit breakpoint
-	if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
-		perror("ptrace cont");
-		return;
-	}
-
-	waitpid(child_pid, &wait_status, 0);
-
-	if (WIFSTOPPED(wait_status)) {
-		printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
-		printf("hit breakpoint at 0x%lx\n", breakpoint_addr);
-		print_registers(child_pid);
-	}
-
-	if (disable_breakpoint(child_pid, &bp) < 0) {
-		return;
-	}
-
-	printf("restored original instruction at 0x%lx\n", bp.addr);
-
-	set_instruction_pointer(child_pid, bp.addr); // this is to rewind the instruction pointer back to the main address
-
-	if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
-		perror("ptrace singlestep");
-		return;
-	}
-
-	waitpid(child_pid, &wait_status, 0);
-	printf("single stepped original instruction\n");
-
-	if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
-		perror("ptrace cont");
+	if (!WIFSTOPPED(wait_status)) {
+		printf("child didnt stop as expected\n");
 		return;
 	}
 
 	while (1) {
 
-		waitpid(child_pid, &wait_status, 0);
-		// exit
-		if (WIFEXITED(wait_status)) {
-			printf("child exited with code %d\n", WEXITSTATUS(wait_status));
+		fputs("kt> ", stdout);
+		fflush(stdout);
+
+		if (fgets(command, sizeof(command), stdin) == NULL) {
 			break;
 		}
-		// killed
-		if (WIFSIGNALED(wait_status)) {
-			printf("child killed by signal %d\n", WTERMSIG(wait_status));
+
+		if (command[0] == 'q') {
+			kill(child_pid, SIGKILL);
+			waitpid(child_pid, &wait_status, 0);
 			break;
 		}
-		// stopped
-		if (WIFSTOPPED(wait_status)) {
-			printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
-			break;
+
+		if (command[0] == 'p') {
+			print_registers(child_pid);
+			continue;
 		}
+
+		if (command[0] == 'b') {
+			char *endptr = NULL;
+			unsigned long addr = strtoul(command + 1, &endptr, 0);
+
+			if (endptr == command + 1) {
+				printf("usage: b <address>\n");
+				continue;
+			}
+
+			bp.addr = addr;
+
+			if (enable_breakpoint(child_pid, &bp) < 0) {
+				printf("failed to set breakpoint\n");
+				continue;
+			}
+
+			printf("breakpoint set at 0x%lx\n", bp.addr);
+			continue;
+		}
+
+		if (command[0] == 'c') {
+			// ptrace continue until hit breakpoint
+			if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
+				perror("ptrace cont");
+				return;
+			}
+
+			waitpid(child_pid, &wait_status, 0);
+
+			if (WIFEXITED(wait_status)) {
+				printf("child exited with code %d\n", WEXITSTATUS(wait_status));
+				break;
+			}
+
+			if (WIFSIGNALED(wait_status)) {
+				printf("child killed by signal %d\n", WTERMSIG(wait_status));
+				break;
+			}
+
+			if (WIFSTOPPED(wait_status)) {
+				printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
+				if (bp.enabled && WSTOPSIG(wait_status) == SIGTRAP) {
+					printf("hit breakpoint at 0x%lx\n", bp.addr);
+					print_registers(child_pid);
+
+
+					if (disable_breakpoint(child_pid, &bp) < 0) {
+						return;
+					}
+
+					set_instruction_pointer(child_pid, bp.addr); // this is to rewind the instruction pointer back to the main address
+					printf("breakpoint restored to original instructions\n");
+				}
+			}
+			continue;
+		}
+
+		if (command[0] == 's') {
+
+			if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
+				perror("ptrace singlestep");
+				return;
+			}
+
+			waitpid(child_pid, &wait_status, 0);
+
+			if (WIFEXITED(wait_status)) {
+				printf("child exited with status %d\n", WEXITSTATUS(wait_status));
+				break;
+			}
+
+			if (WIFSTOPPED(wait_status)) {
+				printf("single step complete\n");
+				print_registers(child_pid);
+			}
+
+			continue;
+		}
+
+		if (command[0] == 'h') {
+			printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , (h)elp\n");
+			continue;
+		}
+
+		printf("unknown command\n");
+		printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit\n");
 	}
 }
 
@@ -232,16 +278,8 @@ int main(int argc, char** argv) {
 
 	pid_t child_pid;
 
-	if (argc < 3) {
-		fprintf(stderr, "Usage: %s <target_binary> <breakpoint_address>\n", argv[0]);
-		return -1;
-	}
-
-	char *endptr = NULL;
-	unsigned long breakpoint_addr = strtoul(argv[2], &endptr, 0);
-
-	if (endptr == argv[2] || *endptr != '\0') {
-		fprintf(stderr, "invalid breakpoint address %s\n", argv[2]);
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <target_binary>\n", argv[0]);
 		return -1;
 	}
 
@@ -249,7 +287,7 @@ int main(int argc, char** argv) {
 	if (child_pid == 0) {
 		run_target(argv[1]);
 	} else if (child_pid > 0) {
-		run_debugger(child_pid, breakpoint_addr);
+		run_debugger(child_pid);
 	} else {
 		perror("fork");
 		return -1;
