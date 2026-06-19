@@ -23,6 +23,12 @@
 #include <sys/user.h>
 #include <errno.h>
 
+typedef struct {
+	unsigned long addr;
+	unsigned long og_data;
+	int enabled;
+} breakpoint_t;
+
 void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
 
 	struct user_regs_struct regs;
@@ -40,16 +46,16 @@ void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
 	}
 }
 
-unsigned long set_breakpoint(pid_t child_pid, unsigned long addr) {
-
-	unsigned long data; // og data
+// *bp so that we can modify it rather than bp which just passes a copy
+int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
 	unsigned long data_with_int3; // data after int3 instruction added
 
 	// read the data
 	errno = 0;
-	data = ptrace(PTRACE_PEEKTEXT, child_pid, (void *)addr, 0);
+	// use -> because bp is a pointer
+	bp->og_data = ptrace(PTRACE_PEEKTEXT, child_pid, (void *)bp->addr, 0);
 
-	if (data == (unsigned long)-1 && errno != 0) {
+	if (bp->og_data == (unsigned long)-1 && errno != 0) {
 		perror("ptrace peektext");
 		return 0;
 	}
@@ -66,13 +72,30 @@ unsigned long set_breakpoint(pid_t child_pid, unsigned long addr) {
 	0xababab00 | 0xcc  = 0xabababcc
 	*/
 
-	data_with_int3 = (data & ~0xff) | 0xcc;
+	data_with_int3 = (bp->og_data & ~0xff) | 0xcc;
 	// write the data with int3
-	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)addr, (void *)data_with_int3) < 0) {
+	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)bp->addr, (void *)data_with_int3) < 0) {
 		perror("ptrace poketext");
 		return 0;
 	}
-	return data;
+
+	bp->enabled = 1;
+	return 0;
+}
+
+int disable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
+
+	if (!bp->enabled) {
+		return 0;
+	}
+
+	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)bp->addr, (void *)bp->og_data) < 0) {
+		perror("ptrace restore breakpoint");
+		return -1;
+	}
+
+	bp->enabled = 0;
+	return 0;
 }
 
 void print_registers(pid_t child_pid) {
@@ -135,9 +158,14 @@ void run_debugger(pid_t child_pid, unsigned long breakpoint_addr) {
 		printf("child did not stop as expected\n");
 		return;
 	}
-	unsigned long og_data = set_breakpoint(child_pid, breakpoint_addr);
+	//unsigned long og_data = set_breakpoint(child_pid, breakpoint_addr);
 
-	if (og_data == 0) {
+	breakpoint_t bp;
+	bp.addr = breakpoint_addr;
+	bp.og_data = 0;
+	bp.enabled = 0;
+
+	if (enable_breakpoint(child_pid, &bp) < 0) {
 		printf("failed to set breakpoint\n");
 		return;
 	}
@@ -158,14 +186,13 @@ void run_debugger(pid_t child_pid, unsigned long breakpoint_addr) {
 		print_registers(child_pid);
 	}
 
-	if (ptrace(PTRACE_POKETEXT, child_pid, (void *)breakpoint_addr, (void *)og_data) < 0) {
-		perror("ptrace restore");
+	if (disable_breakpoint(child_pid, &bp) < 0) {
 		return;
 	}
 
-	printf("restored original instruction at 0x%lx\n", breakpoint_addr);
+	printf("restored original instruction at 0x%lx\n", bp.addr);
 
-	set_instruction_pointer(child_pid, breakpoint_addr); // this is to rewind the instruction pointer back to the main address
+	set_instruction_pointer(child_pid, bp.addr); // this is to rewind the instruction pointer back to the main address
 
 	if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
 		perror("ptrace singlestep");
