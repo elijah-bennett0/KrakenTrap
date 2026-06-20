@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="KrakenTrap logo" width="420">
+  <img src="assets/logo.png" alt="KrakenTrap logo" width="360">
 </p>
 
 # KrakenTrap
