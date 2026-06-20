@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/krakentrap-logo.png" alt="KrakenTrap logo" width="420">
+</p>
+
 # KrakenTrap
 
 KrakenTrap is a Linux x86-64 debugger for authorized reverse engineering, lab debugging, and low-level systems learning.
