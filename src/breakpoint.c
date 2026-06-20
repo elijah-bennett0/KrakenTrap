@@ -91,7 +91,7 @@ int step_over_breakpoint(pid_t child_pid, breakpoint_t **pending_bp, int *wait_s
         waitpid(child_pid, wait_status, 0);
 
         if (WIFEXITED(*wait_status)) {
-                printf("chld exited with code %d\n", WEXITSTATUS(*wait_status));
+                printf("child exited with code %d\n", WEXITSTATUS(*wait_status));
                 *pending_bp = NULL;
                 return 1;
         }
