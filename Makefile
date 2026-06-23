@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-Wall -Wextra -g -Iinclude
 
-SRC=src/main.c src/process.c src/repl.c src/breakpoint.c src/registers.c
+SRC=src/main.c src/process.c src/repl.c src/breakpoint.c src/registers.c src/memory.c
 
 all:
 	$(CC) $(CFLAGS) $(SRC) -o krakentrap

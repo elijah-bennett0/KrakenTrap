@@ -8,6 +8,7 @@
 #include "krakentrap/repl.h"
 #include "krakentrap/breakpoint.h"
 #include "krakentrap/registers.h"
+#include "krakentrap/memory.h"
 
 void run_debugger(pid_t child_pid) {
 
@@ -182,6 +183,16 @@ void run_debugger(pid_t child_pid) {
                         printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , (h)elp\n");
                         continue;
                 }
+
+		if (command[0] == 'x') {
+			char *endptr = NULL;
+
+			unsigned long addr = strtoul(command + 1, &endptr, 0);
+			if (examine_memory(child_pid, addr) < 0) {
+				printf("failed to examine memory\n");
+			}
+			continue;
+		}
 
                 printf("unknown command\n");
                 printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit\n");
