@@ -41,6 +41,10 @@ void run_debugger(pid_t child_pid) {
                         break;
                 }
 
+		if (command[0] == '\n') {
+			continue;
+		}
+
                 if (command[0] == 'q') {
                         kill(child_pid, SIGKILL);
                         waitpid(child_pid, &wait_status, 0);
@@ -186,9 +190,14 @@ void run_debugger(pid_t child_pid) {
 
 		if (command[0] == 'x') {
 			char *endptr = NULL;
-
 			unsigned long addr = strtoul(command + 1, &endptr, 0);
-			if (examine_memory(child_pid, addr) < 0) {
+
+			int byte_count = 8; // default
+			if (*endptr != '\n' && *endptr != '\0') {
+				byte_count = strtol(endptr, &endptr, 0);
+			}
+
+			if (examine_memory(child_pid, addr, byte_count) < 0) {
 				printf("failed to examine memory\n");
 			}
 			continue;
