@@ -78,6 +78,16 @@ breakpoint_t *find_breakpoint_by_addr(breakpoint_t *breakpoints, unsigned long a
         return NULL;
 }
 
+void print_breakpoints(breakpoint_t *breakpoints) {
+
+	for (int i = 0; i < MAX_BREAKPOINTS; i++) {
+		if (breakpoints[i].used) {
+			printf("Breakpoint set at: 0x%lx\n", breakpoints[i].addr);
+		}
+	}
+
+}
+
 int step_over_breakpoint(pid_t child_pid, breakpoint_t **pending_bp, int *wait_status) {
         if (*pending_bp == NULL) {
                 return 0;

@@ -52,8 +52,19 @@ void run_debugger(pid_t child_pid) {
                 }
 
                 if (command[0] == 'p') {
-                        print_registers(child_pid);
-                        continue;
+			//char *endptr = NULL;
+			if (command[2] == 'r') {
+                        	print_registers(child_pid);
+				continue;
+			}
+
+			if (command[2] == 'b') {
+				print_breakpoints(breakpoints);
+				continue;
+			}
+
+			printf("usage: p <(r)egisters , (b)reakpoints>\n");
+			continue;
                 }
 
                 if (command[0] == 'b') {
@@ -184,7 +195,7 @@ void run_debugger(pid_t child_pid) {
                 }
 
                 if (command[0] == 'h') {
-                        printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , (h)elp\n");
+                        printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
                         continue;
                 }
 
