@@ -1,5 +1,5 @@
 # Build outputs
-krakentrap
+/krakentrap
 *.o
 *.so
 *.a

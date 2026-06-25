@@ -3,12 +3,14 @@
 #include <sys/user.h>
 
 #include "krakentrap/registers.h"
+#include "krakentrap/color.h"
 
 unsigned long get_instruction_pointer(pid_t child_pid) {
         struct user_regs_struct regs;
 
         if (ptrace(PTRACE_GETREGS, child_pid, 0, &regs) < 0) {
-                perror("ptrace getregs");
+                printf(KT_ERR "Ptrace error\n");
+		perror("ptrace getregs");
                 return 0;
         }
         return regs.rip;
@@ -19,6 +21,7 @@ void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
         struct user_regs_struct regs;
 
         if (ptrace(PTRACE_GETREGS, child_pid, 0, &regs) < 0) {
+		printf(KT_ERR "Ptrace error\n");
                 perror("ptrace getregs");
                 return;
         }
@@ -26,6 +29,7 @@ void set_instruction_pointer(pid_t child_pid, unsigned long addr) {
         regs.rip = addr;
 
         if (ptrace(PTRACE_SETREGS, child_pid, 0, &regs) < 0) {
+		printf(KT_ERR "Ptrace error\n");
                 perror("ptrace setregs");
                 return;
         }
@@ -37,6 +41,7 @@ void print_registers(pid_t child_pid) {
         struct user_regs_struct regs; // from sys/user.h
 
         if (ptrace(PTRACE_GETREGS, child_pid, 0, &regs) < 0) {
+		printf(KT_ERR "Ptrace error\n");
                 perror("ptrace getregs");
                 return;
         }

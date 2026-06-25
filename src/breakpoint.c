@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 
 #include "krakentrap/breakpoint.h"
+#include "krakentrap/color.h"
 
 // *bp so that we can modify it rather than bp which just passes a copy
 int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
@@ -15,6 +16,7 @@ int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
         bp->og_data = ptrace(PTRACE_PEEKTEXT, child_pid, (void *)bp->addr, 0);
 
         if (bp->og_data == (unsigned long)-1 && errno != 0) {
+		printf(KT_ERR "Read data fail!\n");
                 perror("ptrace peektext");
                 return -1;
         }
@@ -34,6 +36,7 @@ int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
         data_with_int3 = (bp->og_data & ~0xff) | 0xcc;
         // write the data with int3
         if (ptrace(PTRACE_POKETEXT, child_pid, (void *)bp->addr, (void *)data_with_int3) < 0) {
+		printf(KT_ERR "Write data fail!\n");
                 perror("ptrace poketext");
                 return -1;
         }
@@ -50,7 +53,8 @@ int disable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
         }
 
         if (ptrace(PTRACE_POKETEXT, child_pid, (void *)bp->addr, (void *)bp->og_data) < 0) {
-                perror("ptrace restore breakpoint");
+                printf(KT_ERR "Write data fail!\n");
+		perror("ptrace restore breakpoint");
                 return -1;
         }
 
@@ -80,10 +84,16 @@ breakpoint_t *find_breakpoint_by_addr(breakpoint_t *breakpoints, unsigned long a
 
 void print_breakpoints(breakpoint_t *breakpoints) {
 
+	int found = 0;
 	for (int i = 0; i < MAX_BREAKPOINTS; i++) {
 		if (breakpoints[i].used) {
-			printf("Breakpoint set at: 0x%lx\n", breakpoints[i].addr);
+			found = 1;
+			printf(KT_GOOD "Breakpoint set at: 0x%lx\n", breakpoints[i].addr);
 		}
+	}
+
+	if (!found) {
+		printf(KT_INFO "No breakpoints found\n");
 	}
 
 }
@@ -94,30 +104,31 @@ int step_over_breakpoint(pid_t child_pid, breakpoint_t **pending_bp, int *wait_s
         }
 
         if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
-                perror("ptrace singlestep");
+                printf(KT_ERR "Step error\n");
+		perror("ptrace singlestep");
                 return -1;
         }
 
         waitpid(child_pid, wait_status, 0);
 
         if (WIFEXITED(*wait_status)) {
-                printf("child exited with code %d\n", WEXITSTATUS(*wait_status));
+                printf(KT_WARN "Child exited with code %d\n", WEXITSTATUS(*wait_status));
                 *pending_bp = NULL;
                 return 1;
         }
 
         if (WIFSIGNALED(*wait_status)) {
-                printf("child killed by signal %d\n", WTERMSIG(*wait_status));
+                printf(KT_WARN "Child killed by signal %d\n", WTERMSIG(*wait_status));
                 *pending_bp = NULL;
                 return 1;
         }
 
         if (enable_breakpoint(child_pid, *pending_bp) < 0) {
-                printf("failed to re-enable breakpoint\n");
+                printf(KT_ERR "Failed to re-enable breakpoint\n");
                 return -1;
         }
 
-        printf("breakpoint re-enabled at 0x%lx\n", (*pending_bp)->addr);
+        printf(KT_GOOD "Breakpoint re-enabled at 0x%lx\n", (*pending_bp)->addr);
         *pending_bp = NULL;
         return 0;
 }

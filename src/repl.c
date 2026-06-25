@@ -9,6 +9,7 @@
 #include "krakentrap/breakpoint.h"
 #include "krakentrap/registers.h"
 #include "krakentrap/memory.h"
+#include "krakentrap/color.h"
 
 void run_debugger(pid_t child_pid) {
 
@@ -28,13 +29,13 @@ void run_debugger(pid_t child_pid) {
         }
 
         if (!WIFSTOPPED(wait_status)) {
-                printf("child didnt stop as expected\n");
+                printf(KT_WARN "Child didnt stop as expected\n");
                 return;
         }
 
         while (1) {
 
-                fputs("kt> ", stdout);
+                fputs("KrakenTrap > ", stdout);
                 fflush(stdout);
 
                 if (fgets(command, sizeof(command), stdin) == NULL) {
@@ -63,7 +64,7 @@ void run_debugger(pid_t child_pid) {
 				continue;
 			}
 
-			printf("usage: p <(r)egisters , (b)reakpoints>\n");
+			printf(KT_INFO "Usage: p <(r)egisters , (b)reakpoints>\n");
 			continue;
                 }
 
@@ -72,19 +73,19 @@ void run_debugger(pid_t child_pid) {
                         unsigned long addr = strtoul(command + 1, &endptr, 0);
 
                         if (endptr == command + 1) {
-                                printf("usage: b <address>\n");
+                                printf(KT_INFO "Usage: b <address>\n");
                                 continue;
                         }
 
                         if (find_breakpoint_by_addr(breakpoints, addr) != NULL) {
-                                printf("breakpoint already set at 0x%lx\n", addr);
+                                printf(KT_INFO "Breakpoint already set at 0x%lx\n", addr);
                                 continue;
                         }
 
                         breakpoint_t *bp = find_free_breakpoint(breakpoints);
 
                         if (bp == NULL) {
-                                printf("max breakpoints reached\n");
+                                printf(KT_INFO "Max breakpoints reached\n");
                                 continue;
                         }
 
@@ -94,11 +95,11 @@ void run_debugger(pid_t child_pid) {
                         bp->used = 0;
 
                         if (enable_breakpoint(child_pid, bp) < 0) {
-                                printf("failed to set breakpoint\n");
+                                printf(KT_ERR "Failed to set breakpoint\n");
                                 continue;
                         }
 
-                        printf("breakpoint set at 0x%lx\n", bp->addr);
+                        printf(KT_GOOD "Breakpoint set at 0x%lx\n", bp->addr);
                         continue;
                 }
 
@@ -118,6 +119,7 @@ void run_debugger(pid_t child_pid) {
 
                         // ptrace continue until hit breakpoint
                         if (ptrace(PTRACE_CONT, child_pid, 0, 0) < 0) {
+				printf(KT_ERR "Ptrace error\n");
                                 perror("ptrace cont");
                                 return;
                         }
@@ -125,18 +127,18 @@ void run_debugger(pid_t child_pid) {
                         waitpid(child_pid, &wait_status, 0);
 
                         if (WIFEXITED(wait_status)) {
-                                printf("child exited with code %d\n", WEXITSTATUS(wait_status));
+                                printf(KT_WARN "Child exited with code %d\n", WEXITSTATUS(wait_status));
                                 break;
                         }
 
                         if (WIFSIGNALED(wait_status)) {
-                                printf("child killed by signal %d\n", WTERMSIG(wait_status));
+                                printf(KT_WARN "Child killed by signal %d\n", WTERMSIG(wait_status));
                                 break;
                         }
 
                         if (WIFSTOPPED(wait_status)) {
 
-                                printf("child stopped with signal %d\n", WSTOPSIG(wait_status));
+                                printf(KT_WARN "Child stopped with signal %d\n", WSTOPSIG(wait_status));
 
                                 if (WSTOPSIG(wait_status) == SIGTRAP) {
                                         unsigned long rip = get_instruction_pointer(child_pid);
@@ -145,7 +147,7 @@ void run_debugger(pid_t child_pid) {
                                         breakpoint_t *hit_bp = find_breakpoint_by_addr(breakpoints, hit_addr);
 
                                         if (hit_bp != NULL && hit_bp->enabled) {
-                                                printf("hit breakpoint at 0x%lx\n", hit_bp->addr);
+                                                printf(KT_INFO "Hit breakpoint at 0x%lx\n", hit_bp->addr);
                                                 print_registers(child_pid);
 
                                                 if (disable_breakpoint(child_pid, hit_bp) < 0) {
@@ -155,7 +157,7 @@ void run_debugger(pid_t child_pid) {
                                                 set_instruction_pointer(child_pid, hit_bp->addr);
                                                 pending_bp = hit_bp;
 
-                                                printf("breakpoint restored to original instruction\n");
+                                                printf(KT_INFO "Breakpoint restored to original instruction\n");
                                         }
 
                                 }
@@ -175,6 +177,7 @@ void run_debugger(pid_t child_pid) {
                         }
 
                         if (ptrace(PTRACE_SINGLESTEP, child_pid, 0, 0) < 0) {
+				printf(KT_ERR "Ptrace error\n");
                                 perror("ptrace singlestep");
                                 return;
                         }
@@ -182,12 +185,12 @@ void run_debugger(pid_t child_pid) {
                         waitpid(child_pid, &wait_status, 0);
 
                         if (WIFEXITED(wait_status)) {
-                                printf("child exited with status %d\n", WEXITSTATUS(wait_status));
+                                printf(KT_WARN "Child exited with status %d\n", WEXITSTATUS(wait_status));
                                 break;
                         }
 
                         if (WIFSTOPPED(wait_status)) {
-                                printf("single step complete\n");
+                                printf(KT_INFO "Single step complete\n");
                                 print_registers(child_pid);
                         }
 
@@ -195,7 +198,7 @@ void run_debugger(pid_t child_pid) {
                 }
 
                 if (command[0] == 'h') {
-                        printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
+                        printf(KT_INFO "Commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
                         continue;
                 }
 
@@ -209,12 +212,12 @@ void run_debugger(pid_t child_pid) {
 			}
 
 			if (examine_memory(child_pid, addr, byte_count) < 0) {
-				printf("failed to examine memory\n");
+				printf(KT_ERR "Failed to examine memory\n");
 			}
 			continue;
 		}
 
-                printf("unknown command\n");
-                printf("commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit\n");
+                printf(KT_ERR "Unknown command\n");
+                printf(KT_INFO "Commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
         }
 }
