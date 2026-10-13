@@ -35,8 +35,6 @@ int load_symbol_table(const char *path, symbol_table_t *table) {
 		return 1;
 	}
 
-	
-
 }
 
 void free_symbol_table(symbol_table_t *table) {

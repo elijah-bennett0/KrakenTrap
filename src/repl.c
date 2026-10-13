@@ -198,7 +198,7 @@ void run_debugger(pid_t child_pid) {
                 }
 
                 if (command[0] == 'h') {
-                        printf(KT_INFO "Commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
+                        printf(KT_INFO "Commands: \n\t(b)reak <addr>\n\t(p)rint [registers]\n\t(s)tep\n\t(c)ontinue\n\t(q)uit\n\te(x)amine <address> <byte_count>\n\t(h)elp\n");
                         continue;
                 }
 
@@ -218,6 +218,6 @@ void run_debugger(pid_t child_pid) {
 		}
 
                 printf(KT_ERR "Unknown command\n");
-                printf(KT_INFO "Commands: (b)reak <addr> , (p)rint [registers] , (s)tep , (c)ontinue , (q)uit , e(x)amine <address> <byte_count> , (h)elp\n");
+                printf(KT_INFO "Commands: \n\t(b)reak <addr>\n\t(p)rint [registers]\n\t(s)tep\n\t(c)ontinue\n\t(q)uit\n\te(x)amine <address> <byte_count>\n\t(h)elp\n");
         }
 }
