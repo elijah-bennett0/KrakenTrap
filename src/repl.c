@@ -1,5 +1,6 @@
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
@@ -70,15 +71,33 @@ void run_debugger(pid_t child_pid) {
 
                 if (command[0] == 'b') {
                         char *endptr = NULL;
-                        unsigned long addr = strtoul(command + 1, &endptr, 0);
+			char *addr_or_sym = strtok(command, " \t\r\n");
+			addr_or_sym = strtok(NULL, " \t\r\n");
 
-                        if (endptr == command + 1) {
-                                printf(KT_INFO "Usage: b <address>\n");
-                                continue;
-                        }
+			if (addr_or_sym == NULL) {
+				printf(KT_INFO "Usage: b <address/symbol>\n");
+			}
 
-                        if (find_breakpoint_by_addr(breakpoints, addr) != NULL) {
-                                printf(KT_INFO "Breakpoint already set at 0x%lx\n", addr);
+			unsigned long long value = strtoull(addr_or_sym, &endptr, 0);
+
+			if (endptr != addr_or_sym && *endptr == '\0') {
+				printf("ADDRESS: 0x%llx\n", value);
+			} else {
+				printf("SYMBOL: %s\n", addr_or_sym);
+			}
+
+			/*
+			================ debug ====================
+			printf("DEBUG: input='%s'\n", addr_or_sym);
+			printf("DEBUG: value=0x%llx\n", value);
+			printf("DEBUG: endptr='%s'\n", endptr);
+			printf("DEBUG: consumed=%ld\n", (long)(endptr - addr_or_sym));
+			==============================================================
+
+			FIX WITH UPDATED METHOD IN TESTS/
+
+                        if (find_breakpoint_by_addr(breakpoints, value) != NULL) {
+                                printf(KT_INFO "Breakpoint already set at 0x%llx\n", value);
                                 continue;
                         }
 
@@ -89,7 +108,7 @@ void run_debugger(pid_t child_pid) {
                                 continue;
                         }
 
-                        bp->addr = addr;
+                        bp->addr = value;
                         bp->og_data = 0;
                         bp->enabled = 0;
                         bp->used = 0;
@@ -99,8 +118,9 @@ void run_debugger(pid_t child_pid) {
                                 continue;
                         }
 
-                        printf(KT_GOOD "Breakpoint set at 0x%lx\n", bp->addr);
-                        continue;
+                        printf(KT_GOOD "Breakpoint set at 0x%llx\n", bp->addr);
+                        */
+			continue;
                 }
 
                 if (command[0] == 'c') {
