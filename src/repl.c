@@ -11,8 +11,19 @@
 #include "krakentrap/registers.h"
 #include "krakentrap/memory.h"
 #include "krakentrap/color.h"
+#include "krakentrap/symbols.h"
 
-void run_debugger(pid_t child_pid) {
+void run_debugger(pid_t child_pid, char* path) {
+
+	symbol_table_t symbol_table = {0};
+
+	// table.symbols and table.count
+	if (load_symbol_table(path, &symbol_table) != 0) {
+		printf(KT_ERR "Could not load symbol table...");
+		return;
+	}
+
+	printf(KT_GOOD "Loaded %zu symbols.\n", symbol_table.count);
 
         int wait_status;
         char command[128];
@@ -78,12 +89,32 @@ void run_debugger(pid_t child_pid) {
 				printf(KT_INFO "Usage: b <address/symbol>\n");
 			}
 
-			unsigned long long value = strtoull(addr_or_sym, &endptr, 0);
+			unsigned long long address = strtoull(addr_or_sym, &endptr, 0);
+			breakpoint_t *bp = find_free_breakpoint(breakpoints);
 
 			if (endptr != addr_or_sym && *endptr == '\0') {
-				printf("ADDRESS: 0x%llx\n", value);
+				//printf("ADDRESS: 0x%llx\n", value);
+				if (find_breakpoint_by_addr(breakpoints, address)) {
+					printf(KT_INFO "Breakpoint already set at 0x%llx\n", address);
+				}
+
+				bp->addr = address;
+				bp->og_data = 0;
+				bp->enabled = 0;
+				bp->used = 0;
+
 			} else {
-				printf("SYMBOL: %s\n", addr_or_sym);
+				//printf("SYMBOL: %s\n", addr_or_sym);
+				symbol_t *sym = find_symbol_by_name(&symbol_table, addr_or_sym);
+				if (find_breakpoint_by_addr(breakpoints, address)) {
+					printf(KT_INFO "Breakpoint already set at 0x%lx\n", sym->addr);
+				}
+
+				bp->addr = address;
+				bp->og_data = 0;
+				bp->enabled = 0;
+				bp->used = 0;
+
 			}
 
 			/*
@@ -117,9 +148,9 @@ void run_debugger(pid_t child_pid) {
                                 printf(KT_ERR "Failed to set breakpoint\n");
                                 continue;
                         }
+			*/
 
-                        printf(KT_GOOD "Breakpoint set at 0x%llx\n", bp->addr);
-                        */
+                        printf(KT_GOOD "Breakpoint set at 0x%lx\n", bp->addr);
 			continue;
                 }
 
@@ -240,4 +271,5 @@ void run_debugger(pid_t child_pid) {
                 printf(KT_ERR "Unknown command\n");
                 printf(KT_INFO "Commands: \n\t(b)reak <addr>\n\t(p)rint [registers]\n\t(s)tep\n\t(c)ontinue\n\t(q)uit\n\te(x)amine <address> <byte_count>\n\t(h)elp\n");
         }
+	free_symbol_table(&symbol_table);
 }

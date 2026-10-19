@@ -1,54 +1,156 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <elf.h>
-
+#include <bfd.h>
 #include <krakentrap/color.h>
 #include <krakentrap/symbols.h> // define struct there
 
 int load_symbol_table(const char *path, symbol_table_t *table) {
 
-	FILE *fp = fopen(path, "rb");
-	if (!fp) {
-		perror("Couldnt read file");
-		return 1;
+        bfd *abfd;
+        asymbol **symbols = NULL;
+        long storage;
+        long count;
+	size_t n = 0;
+
+	// if no path or no table structure is provided
+	if (!path || !table) {
+		return -1;
 	}
 
-	Elf64_Ehdr header;
+	table->symbols = NULL;
+	table->count = 0;
 
-	if (fread(&header, sizeof(header), 1, fp) != 1) {
-		perror("Couldnt read header");
-		return 1;
+        bfd_init();
+        abfd = bfd_openr(path, NULL);
+
+        if (abfd == NULL) {
+                bfd_perror("bfd_openr");
+                return 1;
+        }
+
+        if (!bfd_check_format(abfd, bfd_object)) {
+                bfd_perror("bfd_check_format");
+                bfd_close(abfd);
+                return 1;
+        }
+
+        storage = bfd_get_symtab_upper_bound(abfd);
+        symbols = malloc((size_t)storage);
+        count = bfd_canonicalize_symtab(abfd, symbols);
+        /*
+        for (long i=0;i<count;i++) {
+
+                asymbol *sym = symbols[i];
+                printf("%s\tvalue=0x%lx\tsection=%s\n",
+                sym->name ? sym->name : "",
+                (unsigned long)bfd_asymbol_value(sym),
+                sym->section ? sym->section->name : "(none)");
+
+        }
+
+        char symbol [64];
+        fputs("Enter symbol name > ", stdout);
+        fflush(stdout);
+
+        if (fgets(symbol, sizeof(symbol), stdin) == NULL) {
+                printf("NULL\n");
+                return 1;
+        } else {
+                symbol[strcspn(symbol, "\n")] = '\0';
+                for (long i=0;i<count;i++) {
+                        asymbol *sym = symbols[i];
+                        if (strcmp(sym->name, symbol) == 0) {
+                                printf("SYMBOL: %s VALUE: 0x%lx\n", symbol, (unsigned long)bfd_asymbol_value(sym));
+                                break;
+                        } else {
+                                continue;
+                        }
+                }
+        }
+
+        free(symbols);
+        bfd_close(abfd);
+        return 0;
+	*/
+
+	table->symbols = calloc((size_t )count, sizeof(symbol_t));
+
+	// if theres nothing, free and close
+	if (count > 0 && !table->symbols) {
+		free(symbols);
+		bfd_close(abfd);
+		return -1;
 	}
 
-	// first 4 bytes of an elf should be \x7fELF
-	if (header.e_ident[EI_MAG0] != ELFMAG0 ||
-		header.e_ident[EI_MAG1] != ELFMAG1 ||
-		header.e_ident[EI_MAG2] != ELFMAG2 ||
-		header.e_ident[EI_MAG3] != ELFMAG3) {
-		printf(KT_ERR "Not a valid elf file\n");
-		fclose(fp);
-		return 1;
+	for (long i=0; i<count;i++) {
+		asymbol *sym = symbols[i];
+		symbol_t *dst = &table->symbols[n];
+		const char *name = bfd_asymbol_name(sym);
+		dst->name = strdup(name);
+		dst->addr = (unsigned long)bfd_asymbol_value(sym);
+		dst->size = 0; // no size from bfd
+		flagword flags = sym->flags;
+		dst->type = (flags & BSF_FUNCTION) ? 'F' :
+			(flags & BSF_OBJECT) ? 'O' : '?';
+		dst->bind = (flags & BSF_GLOBAL) ? 'G' :
+			(flags & BSF_WEAK) ? 'W' : 'L';
+		n++;
 	}
 
-	if (header.e_ident[EI_CLASS] != ELFCLASS64) {
-		printf("Only 64-bit ELF supported for now\n");
-		return 1;
-	}
+	table->count = n;
+	free(symbols);
+	bfd_close(abfd);
+	return 0;
 
 }
 
 void free_symbol_table(symbol_table_t *table) {
 
+	for (size_t i=0;i<table->count;i++) {
+		free(table->symbols[i].name);
+	}
+	free(table->symbols);
+	table->symbols = NULL;
+	table->count = 0;
 }
 
+/*
+table.symbols[0]       // First symbol
+table.symbols[0].name  // Name of the first symbol
+table.symbols[0].addr  // Address of the first symbol
+table.count            // Number of symbols
+*/
 symbol_t *find_symbol_by_name(symbol_table_t *table, const char *name) {
 
+	// loop through symbol names and if its a match, return it
+	for (size_t i=0;i<table->count;i++) {
+
+		if (strcmp(table->symbols[i].name, name) == 0) {
+			return &table->symbols[i];
+		}
+	}
+	return NULL;
 }
 
 symbol_t *find_symbol_by_addr(symbol_table_t *table, unsigned long addr) {
 
+	for (size_t i=0;i<table->count;i++) {
+		if (table->symbols[i].addr == addr) {
+			return &table->symbols[i];
+		}
+	}
+	return NULL;
 }
 
 void print_symbol_table(symbol_table_t *table) {
+
+	for (size_t i=0;i<table->count;i++) {
+		printf("SYMBOL: %s\tADDRESS: %lx\tTYPE: %c\tBIND: %c\n", 
+		(table->symbols[i].name ? table->symbols[i].name : ""),
+		(table->symbols[i].addr),
+		(table->symbols[i].type ? table->symbols[i].type : '?'),
+		(table->symbols[i].bind ? table->symbols[i].bind : '?'));
+	}
 
 }

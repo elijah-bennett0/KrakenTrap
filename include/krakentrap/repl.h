@@ -3,6 +3,6 @@
 
 #include <sys/types.h>
 
-void run_debugger(pid_t child_pid);
+void run_debugger(pid_t child_pid, char* path);
 
 #endif

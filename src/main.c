@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 	if (child_pid == 0) {
 		run_target(argv[1]);
 	} else if (child_pid > 0) {
-		run_debugger(child_pid);
+		run_debugger(child_pid, argv[1]);
 	} else {
 		perror("fork");
 		return -1;
