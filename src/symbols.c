@@ -36,48 +36,34 @@ int load_symbol_table(const char *path, symbol_table_t *table) {
         }
 
         storage = bfd_get_symtab_upper_bound(abfd);
+	// make sure storage is available
+	if (storage <= 0) {
+		printf(KT_ERR "No static symbol table available\n");
+		bfd_close(abfd);
+		return -1;
+	}
+
+
         symbols = malloc((size_t)storage);
-        count = bfd_canonicalize_symtab(abfd, symbols);
-        /*
-        for (long i=0;i<count;i++) {
+	// make sure malloc for the symbols works
+	if (symbols == NULL) {
+		perror("malloc");
+		bfd_close(abfd);
+		return -1;
+	}
 
-                asymbol *sym = symbols[i];
-                printf("%s\tvalue=0x%lx\tsection=%s\n",
-                sym->name ? sym->name : "",
-                (unsigned long)bfd_asymbol_value(sym),
-                sym->section ? sym->section->name : "(none)");
-
-        }
-
-        char symbol [64];
-        fputs("Enter symbol name > ", stdout);
-        fflush(stdout);
-
-        if (fgets(symbol, sizeof(symbol), stdin) == NULL) {
-                printf("NULL\n");
-                return 1;
-        } else {
-                symbol[strcspn(symbol, "\n")] = '\0';
-                for (long i=0;i<count;i++) {
-                        asymbol *sym = symbols[i];
-                        if (strcmp(sym->name, symbol) == 0) {
-                                printf("SYMBOL: %s VALUE: 0x%lx\n", symbol, (unsigned long)bfd_asymbol_value(sym));
-                                break;
-                        } else {
-                                continue;
-                        }
-                }
-        }
-
-        free(symbols);
-        bfd_close(abfd);
-        return 0;
-	*/
+	count = bfd_canonicalize_symtab(abfd, symbols);
+        if (count < 0) {
+		bfd_perror("bfd_canonicalize_symtab");
+		free(symbols);
+		bfd_close(abfd);
+		return -1;
+	}
 
 	table->symbols = calloc((size_t )count, sizeof(symbol_t));
-
-	// if theres nothing, free and close
-	if (count > 0 && !table->symbols) {
+	// if calloc doesnt work right, free and close
+	if (count > 0 && table->symbols == NULL) {
+		perror("calloc");
 		free(symbols);
 		bfd_close(abfd);
 		return -1;
@@ -96,6 +82,7 @@ int load_symbol_table(const char *path, symbol_table_t *table) {
 		dst->bind = (flags & BSF_GLOBAL) ? 'G' :
 			(flags & BSF_WEAK) ? 'W' : 'L';
 		n++;
+
 	}
 
 	table->count = n;
@@ -125,11 +112,11 @@ symbol_t *find_symbol_by_name(symbol_table_t *table, const char *name) {
 
 	// loop through symbol names and if its a match, return it
 	for (size_t i=0;i<table->count;i++) {
-
 		if (strcmp(table->symbols[i].name, name) == 0) {
 			return &table->symbols[i];
 		}
 	}
+	printf(KT_ERR "COULD NOT FIND: %s", name);
 	return NULL;
 }
 

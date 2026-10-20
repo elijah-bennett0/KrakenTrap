@@ -103,52 +103,27 @@ void run_debugger(pid_t child_pid, char* path) {
 				bp->enabled = 0;
 				bp->used = 0;
 
+				if (enable_breakpoint(child_pid, bp) < 0) {
+					printf(KT_ERR "Failed to set breakpoint at 0x%lx\n", bp->addr);
+				}
+
 			} else {
 				//printf("SYMBOL: %s\n", addr_or_sym);
 				symbol_t *sym = find_symbol_by_name(&symbol_table, addr_or_sym);
-				if (find_breakpoint_by_addr(breakpoints, address)) {
+				if (find_breakpoint_by_addr(breakpoints, sym->addr)) {
 					printf(KT_INFO "Breakpoint already set at 0x%lx\n", sym->addr);
 				}
 
-				bp->addr = address;
+				bp->addr = sym->addr;
 				bp->og_data = 0;
 				bp->enabled = 0;
 				bp->used = 0;
 
+				if (enable_breakpoint(child_pid, bp) < 0) {
+					printf(KT_ERR "Failed to set breakpoint at 0x%lx\n", bp->addr);
+				}
+
 			}
-
-			/*
-			================ debug ====================
-			printf("DEBUG: input='%s'\n", addr_or_sym);
-			printf("DEBUG: value=0x%llx\n", value);
-			printf("DEBUG: endptr='%s'\n", endptr);
-			printf("DEBUG: consumed=%ld\n", (long)(endptr - addr_or_sym));
-			==============================================================
-
-			FIX WITH UPDATED METHOD IN TESTS/
-
-                        if (find_breakpoint_by_addr(breakpoints, value) != NULL) {
-                                printf(KT_INFO "Breakpoint already set at 0x%llx\n", value);
-                                continue;
-                        }
-
-                        breakpoint_t *bp = find_free_breakpoint(breakpoints);
-
-                        if (bp == NULL) {
-                                printf(KT_INFO "Max breakpoints reached\n");
-                                continue;
-                        }
-
-                        bp->addr = value;
-                        bp->og_data = 0;
-                        bp->enabled = 0;
-                        bp->used = 0;
-
-                        if (enable_breakpoint(child_pid, bp) < 0) {
-                                printf(KT_ERR "Failed to set breakpoint\n");
-                                continue;
-                        }
-			*/
 
                         printf(KT_GOOD "Breakpoint set at 0x%lx\n", bp->addr);
 			continue;
