@@ -46,7 +46,7 @@ int enable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
         return 0;
 }
 
-int disable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
+int disable_breakpoint(pid_t child_pid, breakpoint_t *bp, breakpoint_t *breakpoints) {
 
         if (!bp->enabled) {
                 return 0;
@@ -59,6 +59,14 @@ int disable_breakpoint(pid_t child_pid, breakpoint_t *bp) {
         }
 
         bp->enabled = 0;
+
+	int count = MAX_BREAKPOINTS;
+	for (int i=0;i<count;i++) {
+		if (&breakpoints[i] == bp) {
+			breakpoints[i] = breakpoints[--count];
+		}
+	}
+
         return 0;
 }
 

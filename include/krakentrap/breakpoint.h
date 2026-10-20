@@ -13,7 +13,7 @@ typedef struct {
 } breakpoint_t;
 
 int enable_breakpoint(pid_t child_pid, breakpoint_t *bp);
-int disable_breakpoint(pid_t child_pid, breakpoint_t *bp);
+int disable_breakpoint(pid_t child_pid, breakpoint_t *bp, breakpoint_t *breakpoints);
 
 breakpoint_t *find_free_breakpoint(breakpoint_t *breakpoints);
 breakpoint_t *find_breakpoint_by_addr(breakpoint_t *breakpoints, unsigned long addr);

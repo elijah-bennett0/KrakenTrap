@@ -134,6 +134,38 @@ void run_debugger(pid_t child_pid, char* path) {
 			continue;
                 }
 
+		if (command[0] == 'u') {
+
+			char *endptr = NULL;
+                        char *addr_or_sym = strtok(command, " \t\r\n");
+                        addr_or_sym = strtok(NULL, " \t\r\n");
+
+                        if (addr_or_sym == NULL) {
+                                printf(KT_INFO "Usage: (u)nset <address/symbol>\n");
+				continue;
+                        }
+
+                        unsigned long address = strtoull(addr_or_sym, &endptr, 0);
+                        if (endptr != addr_or_sym && *endptr == '\0') {
+                                //printf("ADDRESS: 0x%llx\n", value);
+				breakpoint_t *bp = find_breakpoint_by_addr(breakpoints, address);
+				if (bp == NULL) {
+					printf(KT_ERR "Breakpoint not found!\n");
+				} else {
+					unsigned long addr_before_unset = bp->addr;
+					if (disable_breakpoint(child_pid, bp, breakpoints) < 0) {
+						printf(KT_ERR "Could not disable breakpoint at 0x%lx\n", addr_before_unset);
+					} else {
+						printf(KT_GOOD "Breakpoint at %lx disabled\n", addr_before_unset);
+					}
+				}
+			} else {
+				printf(KT_ERR "Not a valid address..\n");
+			}
+
+			continue;
+		}
+
                 if (command[0] == 'c') {
 
                         int step_result = step_over_breakpoint(child_pid, &pending_bp, &wait_status);
@@ -181,7 +213,7 @@ void run_debugger(pid_t child_pid, char* path) {
                                                 printf(KT_INFO "Hit breakpoint at 0x%lx\n", hit_bp->addr);
                                                 print_registers(child_pid);
 
-                                                if (disable_breakpoint(child_pid, hit_bp) < 0) {
+                                                if (disable_breakpoint(child_pid, hit_bp, breakpoints) < 0) {
                                                         return;
                                                 }
 
