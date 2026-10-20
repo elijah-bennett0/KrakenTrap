@@ -76,6 +76,11 @@ void run_debugger(pid_t child_pid, char* path) {
 				continue;
 			}
 
+			if (command[2] == 's') {
+				print_symbol_table(&symbol_table);
+				continue;
+			}
+
 			printf(KT_INFO "Usage: p <(r)egisters , (b)reakpoints>\n");
 			continue;
                 }

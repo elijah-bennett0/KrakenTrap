@@ -133,7 +133,7 @@ symbol_t *find_symbol_by_addr(symbol_table_t *table, unsigned long addr) {
 void print_symbol_table(symbol_table_t *table) {
 
 	for (size_t i=0;i<table->count;i++) {
-		printf("SYMBOL: %s\tADDRESS: %lx\tTYPE: %c\tBIND: %c\n", 
+		printf(KT_INFO"SYMBOL: "KT_YELLOW"%-50s"KT_RESET"ADDRESS: "KT_BLUE"0x%-10lx"KT_RESET"TYPE: %-1c\tBIND: %-1c\n", 
 		(table->symbols[i].name ? table->symbols[i].name : ""),
 		(table->symbols[i].addr),
 		(table->symbols[i].type ? table->symbols[i].type : '?'),
